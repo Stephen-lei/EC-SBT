@@ -1,0 +1,303 @@
+echo "Start runing EFACT_MC"
+
+echo "Start runing EFACT"
+python ~/EFACT/EFACT_NewBuild/pyelftools/EFACT.py -complement $1
+
+LiftedEXFsPath="/home/sole/EFACT/EFACT_NewBuild/Result/liftedGlibcComplement.bc"
+
+# Check if the file exists
+if [ -f "$LiftedEXFsPath" ]; then
+    echo "Lifted EXFs generate successfully"
+else
+    echo "error to generate lifted  EXFs"
+    exit 0
+fi
+
+echo "EFACT complete"
+
+echo "Start using mcsema-disass to disassemble the binary file"
+
+# Running mcsema-disass with multiple options
+/home/sole/local_llvm11_opt/bin/mcsema-disass-3.8 \
+--disassembler "/home/sole/IDAPro/idapro-8.0/idat64" \
+--arch amd64 \
+--os linux \
+--entrypoint main \
+--binary $1 \
+--output $1.cfg \
+--log_file $1.log 
+
+CFGfile_path="$1.cfg"
+
+# Check if the file exists
+if [ -f "$CFGfile_path" ]; then
+    echo "Disassemble CFG generate successfully"
+else
+    echo "error to generate disassembled CFG"
+    exit 0
+fi
+
+echo "Start using mcsema-lift to lift the binary file"
+
+# Running mcsema-lift with multiple options
+/home/sole/local_llvm11_opt/bin/mcsema-lift-11.0  \
+--arch amd64  \
+--os linux  \
+--cfg $1.cfg  \
+--output $1.bc  \
+--explicit_args_count 6  \
+--explicit_args  \
+--abi_libraries $LiftedEXFsPath  \
+--merge_segments  \
+--name_lifted_sections
+
+BitCodefile_path="$1.bc"
+
+# Check if the file exists
+if [ -f "$BitCodefile_path" ]; then
+    echo "Lift llvm bitcode successfully"
+else
+    echo "error to generate lifted llvm bitcode"
+    exit 0
+fi
+
+echo "Mcsema progress complete"
+echo "Start to opt the llvm bit code"
+
+
+echo "Start performing FlagRegisterOPTPass"
+opt -load ~/CPassUnit/FlagRegisterOPT.so  -FlagOPT  $1.bc  -o $1-FlagOPT.bc
+
+afterFlagRegisterOPTfile_path="$1-FlagOPT.bc"
+
+# Check if the file exists
+if [ -f "$afterFlagRegisterOPTfile_path" ]; then
+    echo "FlagRegisterOPTPass successfully"
+else
+    echo "error to perform FlagRegisterOPTPass"
+    exit 0
+fi
+
+
+
+echo "Start performing EXTInlinePass"
+opt -load ~/CPassUnit/EXTInline.so  -EXTInline  $1-FlagOPT.bc  -o $1-EXTInline.bc
+
+afterEXTInlinePassfile_path="$1-EXTInline.bc"
+
+# Check if the file exists
+if [ -f "$afterEXTInlinePassfile_path" ]; then
+    echo "EXTInlinePass successfully"
+else
+    echo "error to perform EXTInlinePass"
+    exit 0
+fi
+
+
+echo "Start performing printfPass"
+opt -load ~/CPassUnit/printfPass.so  -pfr  $1-EXTInline.bc  -o $1-EXTInline-Pfr.bc
+#cp $1-EXTInline.bc $1-EXTInline-Pfr.bc
+
+afterPrintfPassfile_path="$1-EXTInline-Pfr.bc"
+
+# Check if the file exists
+if [ -f "$afterPrintfPassfile_path" ]; then
+    echo "printfPass successfully"
+else
+    echo "error to perform printfPass"
+    exit 0
+fi
+
+echo "Start performing va_listPass"
+##vfprintfPass
+opt -load ~/CPassUnit/va_listPass.so  -vpfr  $1-EXTInline-Pfr.bc  -o $1-EXTInline-Pfr-Vpfr.bc
+
+afterVaListPassfile_path="$1-EXTInline-Pfr-Vpfr.bc"
+
+# Check if the file exists
+if [ -f "$afterVaListPassfile_path" ]; then
+    echo "va_listPass successfully"
+else
+    echo "error to perform va_listPass"
+    exit 0
+fi
+
+echo "Start performing fsRegisterPass"
+
+##fsRegisterPass
+opt -load ~/CPassUnit/fsRegisterPass.so  -fsRegister  $1-EXTInline-Pfr-Vpfr.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister.bc
+
+afterfsRegisterPassfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister.bc"
+
+# Check if the file exists
+if [ -f "$afterfsRegisterPassfile_path" ]; then
+    echo "fsRegisterPass successfully"
+else
+    echo "error to perform fsRegisterPass"
+    exit 0
+fi
+
+echo "Start performing CheckLinker"
+
+##checkLinkerTypePass
+opt -load ~/CPassUnit/checkLinkerType.so  -CheckLinker  $1-EXTInline-Pfr-Vpfr-fsRegister.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker.bc
+
+afterCheckLinkerPassfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker.bc"
+
+# Check if the file exists
+if [ -f "$afterCheckLinkerPassfile_path" ]; then
+    echo "CheckLinker successfully"
+else
+    echo "error to perform CheckLinker"
+    exit 0
+fi
+
+echo "Start performing FunctionNameDirectChangePass"
+
+##FunctionNameDirectChangePass
+opt -load ~/CPassUnit/FunctionNameDirectChange.so  -funcNC  $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC.bc
+
+afterFunctionNameDirectChangefile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC.bc"
+
+# Check if the file exists
+if [ -f "$afterFunctionNameDirectChangefile_path" ]; then
+    echo "FunctionNameDirectChangePass successfully"
+else
+    echo "error to perform FunctionNameDirectChangePass"
+    exit 0
+fi
+
+echo "Start performing CorrectExternalEntryPointRSPPass"
+
+##CorrectExternalEntryPointRSPPass
+opt -load ~/CPassUnit/ExternalEntryPointCheck.so  -EEPFC  $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC.bc
+
+afterCorrectExternalEntryPointRSPfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC.bc"
+
+# Check if the file exists
+if [ -f "$afterCorrectExternalEntryPointRSPfile_path" ]; then
+    echo "CorrectExternalEntryPointRSPPass successfully"
+else
+    echo "error to perform CorrectExternalEntryPointRSPPass"
+    exit 0
+fi
+
+
+echo "Start inline the EXTfunction"
+
+opt -always-inline $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC.bc -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC.bc
+
+echo "Start performing statPass"
+
+##statPass
+opt -load ~/CPassUnit/statPass.so  -stat  $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat.bc
+
+afterStatPassfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat.bc"
+
+# Check if the file exists
+if [ -f "$afterStatPassfile_path" ]; then
+    echo "statPass successfully"
+else
+    echo "error to perform statPass"
+    exit 0
+fi
+
+echo "Start performing fstatPass"
+
+##fstatPass
+opt -load ~/CPassUnit/fstatPass.so  -fstat  $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat.bc
+
+afterfstatPassfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat.bc"
+
+# Check if the file exists
+if [ -f "$afterfstatPassfile_path" ]; then
+    echo "fstatPass successfully"
+else
+    echo "error to perform fstatPass"
+    exit 0
+fi
+
+echo "Start performing changCallingConvensionPass"
+
+##changCallingConvensionPass
+opt -load ~/CPassUnit/changCallingConvension.so  -ChangeCC  $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat.bc  -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc.bc
+
+afterchangCallingConvensionPassfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc.bc"
+
+# Check if the file exists
+if [ -f "$afterchangCallingConvensionPassfile_path" ]; then
+    echo "changCallingConvensionPass successfully"
+else
+    echo "error to perform changCallingConvensionPass"
+    exit 0
+fi
+
+
+ORIGINAL_PATH="$PATH"
+
+# Add your directory to the PATH
+export PATH="/home/sole/llvm/llvm_latest/llvm-project-main/build/bin:$PATH"
+echo "PATH is now: $PATH"
+
+echo "Start perform TLStoRegitserPass"
+opt --load-pass-plugin=/home/sole/CPassUnit/TLS.so --passes="tls" $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc.bc -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc-TLStoRe.bc
+
+
+afterTLStoRegitserPassfile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc-TLStoRe.bc"
+
+# Check if the file exists
+if [ -f "$afterTLStoRegitserPassfile_path" ]; then
+    echo "TLStoRegitserPass successfully"
+else
+    echo "error to perform TLStoRegitserPass"
+    exit 0
+fi
+
+echo "Optimization process all complete"
+
+echo "Start to generate the final binary file"
+
+
+
+# Add your directory to the CPATH
+ORIGINAL_CPATH="$CPATH"
+#export CPATH="/home/sole/armCrossCompileToolChain/arm-gnu-toolchain-13.2.Rel1-x86_64-aarch64-none-elf/aarch64-none-elf/include:$CPATH"
+
+echo "CPATH is now: $CPATH"
+
+
+clang \
+-T /home/sole/CPassUnit/ld_script_aarch64_back.ld \
+--sysroot="/home/sole/armCrossCompileToolChain/gcc-arm-9.2-2019.12-x86_64-aarch64-none-linux-gnu/aarch64-none-linux-gnu/libc" \
+--gcc-toolchain="/home/sole/armCrossCompileToolChain/gcc-arm-9.2-2019.12-x86_64-aarch64-none-linux-gnu" \
+-L. ./va_listHelperFunc_c.so \
+$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc-TLStoRe.bc -O3  -lm -pthread -o $1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc-TLStoRe_AArch64
+
+afterGeneratedFile_path="$1-EXTInline-Pfr-Vpfr-fsRegister-CheckLinker-FuncNC-EEPFC-stat-fstat-ccc-TLStoRe_AArch64"
+
+# Check if the file exists
+if [ -f "$afterGeneratedFile_path" ]; then
+    echo "Final binary file generate successfully"
+else
+    echo "error to generate final binary file"
+    exit 0
+fi
+
+# Restore the original PATH
+export PATH="$ORIGINAL_PATH"
+echo "PATH has been restored to: $PATH"
+
+# Restore the original CPATH
+export CPATH="$ORIGINAL_CPATH"
+echo "CPATH has been restored to: $CPATH"
+
+
+
+
+echo "Delete the lifted result from EFACT"
+
+rm $LiftedEXFsPath
+
+
+echo "All process complete"
+

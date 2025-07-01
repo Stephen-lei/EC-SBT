@@ -11,7 +11,7 @@ to use this tool,you have to install :
 | Name                                                       | Version |
 | ---------------------------------------------------------- | ------- |
 | [EFACT](https://github.com/solecnugit/EFACT)                                | Latest  |
-| [CDMF](https://github.com/urielsinger/CDMF)                                | Latest   |
+| [CDMF](https://github.com/wuwen03/CMDF)                                | Latest   |
 | [McSema](https://github.com/lifting-bits/mcsema)                            | Latest   |
 | [llvm](https://github.com/llvm/llvm-project)                            | 20   |
 

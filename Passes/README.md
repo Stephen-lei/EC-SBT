@@ -9,3 +9,8 @@ Set these variables before compilation:
 ```bash
 export LLVM11_CLANG=/path/to/clang-11   # Example: /usr/bin/clang-11
 export LLVM20_CLANG=/path/to/clang-20   # Example: /usr/bin/clang-20
+```
+## 2. build passed
+```bash
+chmod +x build_passes.sh
+./build_passes.sh

@@ -19,7 +19,7 @@ to use this tool,you have to install :
 
 2.after install the above three project, please compile the passes with the guide under /Passes.
  
-3.replace the direct dir in script/EC-SBT-Runner-base with the dir of the current paltfrom.
+3.follow the guide in script/EC-SBT-Runner-base to  specify the dir of the current paltfrom.
 
 4.run the EC-SBT:
 ```bash
